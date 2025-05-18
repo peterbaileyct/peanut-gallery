@@ -1,5 +1,11 @@
 # Purpose
-This is a Flutter application for MacOS, iOS, and Android, that allows a user to ask a question of an orchestrated set of Personas using Large Language Models. The user defines 
+This is a Flutter application for MacOS, iOS, and Android, that allows a user to ask a question of an orchestrated set of Personas using Large Language Models. The user defines
+
+## Generated Files:
+- lib/main.dart: The main entry point for the Flutter application.
+- lib/services/storage_service.dart: Handles local storage for Personas and API keys.
+- lib/ui/widgets/: Directory for UI components.
+- lib/bs_ns_controller.dart: Manages the invocation and interaction with the BS-NS process.
 
 ## Data Types
 A Persona is a combination of a name and a Mission Statement, which is a long-form description of a person's goals and intentions. More details are in persona.few.md.

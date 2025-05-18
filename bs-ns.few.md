@@ -1,4 +1,8 @@
 # BS-NS: Boss of the Negotiation System
+
+## Generated Files:
+- lib/bs_ns.dart: Implements the BS-NS orchestration logic.
+
 BS-NS is a non-AI subsystem that orchestrates control between the LLMs representing the Advocates and uses further LLM sessions to condense and parse information to aid in this orchestration. BS-NS needs a Gemini API key in order to operate, as well as a user Persona, two Advocate Personas, and optionally between 1 and 12 Jury personas. Each prompt and response from the LLMs used should be output for logging purposes, to be consumed by the code that invokes BS-NS.
 
 ## Mediation
