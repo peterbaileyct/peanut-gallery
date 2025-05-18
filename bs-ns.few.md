@@ -11,7 +11,8 @@ When the user asks a question, BS-NS will do the following:
 - Begin a separate LLM session for each Advocate by indicating: "You are playing the role of a conflict mediator. Your name is [name]. Your mission statement is: [Mission Statement]. Your goal is to seek a peaceful resolution. When you feel that a peaceful resolution has been identified, you will end your message with the word RESOLVED in a single line in all capitals."
 - If a jury was chosen:
   - Tell the advocates: "There is a jury for this dispute. You are encouraged to discuss the matter in terms that will be meaningful to them. They are:" followed by a full list of the names and mission statements of the jury.
-- Tell the advocates: "[Name of user persona] brings you a matter to resolve. Their mission statement is: [Mission Statement]. They ask: [question]"
-- Until either both advocates have ended their message with RESOLVED or ten iterations have passed, tell each advocate what the other said.
-- If both said "RESOLVED", start a new LLM session and have it generate a summary of the resolution based on the user's mission statement.
-- Otherwise, indicate that no resolution could be found and this matter should be brought to the attention of carbon-based life forms.
+- Tell the advocates: "[Name of user persona] brings you a matter to resolve. Their mission statement is: [Mission Statement]. They ask: [question]. Please provide your initial thoughts on the matter.
+- Repeat the following until either both advocates have ended their message with RESOLVED or ten iterations have passed:
+  - Tell each advocate what the other said and ask them to find common ground, resolve discrepancies, challenge assumptions or biases on the other advocate's part.
+  - If both said "RESOLVED", start a new LLM session and have it generate a summary of the resolution based on the user's mission statement.
+- If no resolution was found, indicate that no resolution could be found and this matter should be brought to the attention of carbon-based life forms.
