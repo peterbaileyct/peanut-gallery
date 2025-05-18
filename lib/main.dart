@@ -1,307 +1,278 @@
-// lib/main.dart (Conceptual Outline)
 import 'package:flutter/material.dart';
-import 'models/persona.dart';
-import 'services/storage_service.dart';
-import 'bs_ns_controller.dart';
-// Potentially: import 'ui/widgets/persona_editor.dart';
-// Potentially: import 'ui/widgets/llm_output_display.dart';
-// Potentially: import 'ui/widgets/question_input.dart';
-// Potentially: import 'ui/widgets/advocate_jury_selector.dart';
+import 'package:peanut_gallery/services/storage_service.dart';
+import 'package:peanut_gallery/bs_ns_controller.dart';
+import 'package:peanut_gallery/models/persona.dart';
+import 'package:peanut_gallery/ui/widgets/persona_editor.dart';
+import 'package:peanut_gallery/ui/widgets/conversation_display.dart';
+import 'package:peanut_gallery/ui/widgets/persona_selector.dart';
+import 'package:peanut_gallery/ui/widgets/api_key_dialog.dart';
 
-void main() {
-  runApp(PeanutGalleryApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final storageService = StorageService();
+  await storageService.init();
+  runApp(PeanutGalleryApp(storageService: storageService));
 }
 
 class PeanutGalleryApp extends StatelessWidget {
-  const PeanutGalleryApp({super.key});
+  final StorageService storageService;
+
+  const PeanutGalleryApp({Key? key, required this.storageService}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Peanut Gallery',
-      home: MainPage(),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
+      home: MainScreen(storageService: storageService),
     );
   }
 }
 
-class MainPage extends StatefulWidget {
-  const MainPage({super.key});
+class MainScreen extends StatefulWidget {
+  final StorageService storageService;
+
+  const MainScreen({Key? key, required this.storageService}) : super(key: key);
 
   @override
-  _MainPageState createState() => _MainPageState();
+  _MainScreenState createState() => _MainScreenState();
 }
 
-class _MainPageState extends State<MainPage> {
-  // User Persona state
-  Persona userPersona = Persona(name: "Puddin' Tame", missionStatement: "I am a good dude and/or a strong lady and I have some questions.");
-  TextEditingController userNameController = TextEditingController();
-  TextEditingController userMissionController = TextEditingController();
-
-  // API Key state
-  String? geminiApiKey;
-
-  // Advocates and Jury state
-  List<Persona> availablePersonas = [];
-  List<Persona?> selectedAdvocates = [null, null];
-  List<Persona?> selectedJury = List.filled(12, null);
-
-  // LLM Output log
-  List<String> llmLog = [];
-
-  // Question state
-  TextEditingController questionController = TextEditingController();
-
-  // Services and Controllers
-  late StorageService storageService;
-  late BsNsController bsNsController;
+class _MainScreenState extends State<MainScreen> {
+  late BsNsController _bsNsController;
+  late TextEditingController _questionController;
+  Persona _userPersona = Persona(
+    name: "Puddin' Tame",
+    missionStatement: "I am a good dude and/or a strong lady and I have some questions."
+  );
+  final List<Persona> _availablePersonas = [];
+  List<Persona> _advocatePersonas = [];
+  List<Persona> _juryPersonas = [];
+  String? _apiKey;
+  String _conversationText = '';
+  bool _isProcessing = false;
 
   @override
   void initState() {
     super.initState();
-    storageService = StorageService();
-    bsNsController = BsNsController(
-      logCallback: (logEntry) {
+    _questionController = TextEditingController();
+    _bsNsController = BsNsController(
+      logCallback: (String logMessage) {
         setState(() {
-          llmLog.add(logEntry);
+          _conversationText += '$logMessage\n';
         });
       },
-      getApiKeyCallback: () => Future.value(geminiApiKey),
+      getApiKeyCallback: () async {
+        if (_apiKey == null) {
+          _showApiKeyDialog();
+        }
+        return _apiKey ?? '';
+      },
     );
-    _loadInitialData();
+
+    _loadData();
   }
 
-  void _loadInitialData() async {
-    // Load API Key
-    geminiApiKey = await storageService.getApiKey();
-
-    // Load User Persona
-    Persona? storedUserPersona = await storageService.getUserPersona();
-    if (storedUserPersona != null) {
-      userPersona = storedUserPersona;
+  Future<void> _loadData() async {
+    _apiKey = await widget.storageService.getApiKey();
+    if (_apiKey == null) {
+      _showApiKeyDialog();
     }
-    userNameController.text = userPersona.name;
-    userMissionController.text = userPersona.missionStatement;
 
-    // Load other Personas and defaults if needed
-    List<Persona> otherPersonas = await storageService.getOtherPersonas();
-    if (otherPersonas.isEmpty) {
-      Persona stanley = Persona(name: "Stanley", missionStatement: "A comedic straight man or a taciturn defense attorney, as the situation demands.");
-      Persona oliver = Persona(name: "Oliver", missionStatement: "A humorously exaggerated blowhard or a passionate fighter for justice, as the situation demands.");
-      await storageService.savePersona(stanley);
-      await storageService.savePersona(oliver);
-      availablePersonas = [stanley, oliver];
+    // Load user persona
+    var userPersona = await widget.storageService.getUserPersona();
+    if (userPersona != null) {
+      setState(() {
+        _userPersona = userPersona;
+      });
     } else {
-      availablePersonas = otherPersonas;
+      // Save the default persona we already created
+      await widget.storageService.saveUserPersona(_userPersona);
     }
-    setState(() {});
+    
+    // Load available personas
+    var personas = await widget.storageService.getPersonas();
+    if (personas.isEmpty) {
+      personas = [
+        Persona(
+          name: "Stanley",
+          missionStatement: "A comedic straight man or a taciturn defense attorney, as the situation demands."
+        ),
+        Persona(
+          name: "Oliver",
+          missionStatement: "A humorously exaggerated blowhard or a passionate fighter for justice, as the situation demands."
+        )
+      ];
+      await widget.storageService.savePersonas(personas);
+    }
+    
+    // Update the available personas in state
+    setState(() {
+      _availablePersonas.clear();
+      _availablePersonas.addAll(personas);
+    });
   }
 
-  void _saveUserPersona() {
-    userPersona.name = userNameController.text;
-    userPersona.missionStatement = userMissionController.text;
-    storageService.saveUserPersona(userPersona);
-    setState(() {});
-  }
-
-  void _updateApiKey() async {
-    // Simple dialog to get API key
-    String? newApiKey = await showDialog<String>(
+  void _showApiKeyDialog() {
+    showDialog(
       context: context,
-      builder: (BuildContext context) {
-        TextEditingController apiKeyController = TextEditingController();
-        return AlertDialog(
-               title: const Text('Enter Gemini API Key'),
-content: TextField(controller: apiKeyController, obscureText: true),
-actions: <Widget>[
-TextButton(
-child: const Text('Cancel'),
-onPressed: () => Navigator.of(context).pop(),
-),
-TextButton(
-child: const Text('Save'),
-onPressed: () => Navigator.of(context).pop(apiKeyController.text),
-),
-],
-);
-},
-);
-if (newApiKey != null && newApiKey.isNotEmpty) {
-geminiApiKey = newApiKey;
-await storageService.saveApiKey(newApiKey);
-setState(() {});
-}
-}
+      barrierDismissible: false,
+      builder: (context) => ApiKeyDialog(
+        onSubmit: (apiKey) async {
+          await widget.storageService.saveApiKey(apiKey);
+          setState(() {
+            _apiKey = apiKey;
+          });
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
 
-  void _askQuestion() {
-    if (geminiApiKey == null || geminiApiKey!.isEmpty) {
-       // Show error: API Key needed
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please set your Gemini API Key.")));
-       return;
-    }
-    if (userPersona.name.isEmpty || userPersona.missionStatement.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please set your Persona name and mission statement.")));
-        return;
-    }
-    if (selectedAdvocates.any((p) => p == null)) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select two Advocates.")));
-        return;
-    }
+  void _updateUserPersona(String name, String missionStatement) {
+    final updatedPersona = Persona(
+      name: name,
+      missionStatement: missionStatement
+    );
+    widget.storageService.saveUserPersona(updatedPersona);
+    setState(() {
+      _userPersona = updatedPersona;
+    });
+  }
 
-    final question = questionController.text;
-    if (question.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a question.")));
-        return;
-    }
+  bool get _canAsk {
+    return _userPersona.name.isNotEmpty && 
+           _userPersona.missionStatement.isNotEmpty && 
+           _advocatePersonas.length == 2 &&
+           !_isProcessing;
+  }
+
+  void _askQuestion() async {
+    if (!_canAsk) return;
+    
+    final question = _questionController.text;
+    if (question.isEmpty) return;
 
     setState(() {
-      llmLog.clear(); // Clear previous logs
-      llmLog.add("User: ${userPersona.name} asks: $question");
+      _isProcessing = true;
+      _conversationText = 'Processing question: $question\n\n';
     });
 
-    bsNsController.startMediation(
-      userPersona: userPersona,
-      advocates: selectedAdvocates.whereType<Persona>().toList(),
-      jury: selectedJury.whereType<Persona>().toList(),
+    final result = await _bsNsController.process(
       question: question,
+      userPersona: _userPersona,
+      advocates: _advocatePersonas,
+      jury: _juryPersonas,
+      apiKey: _apiKey!,
+      onUpdate: (text) {
+        setState(() {
+          _conversationText += text;
+        });
+      }
     );
-  }
 
+    setState(() {
+      _conversationText += '\n\nFinal result: $result';
+      _isProcessing = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    // This is a very basic layout.
-    // You'll need to implement proper widgets for persona editing,
-    // advocate/jury selection (drag and drop), LLM output display, etc.
     return Scaffold(
       appBar: AppBar(
         title: const Text('Peanut Gallery'),
         actions: [
           IconButton(
             icon: const Icon(Icons.vpn_key),
-            onPressed: _updateApiKey,
-            tooltip: 'Set API Key',
+            onPressed: _showApiKeyDialog,
+            tooltip: 'Change API Key',
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Left Panel: User Persona
-            Expanded(
-              flex: 1,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Your Persona", style: Theme.of(context).textTheme.headlineSmall),
-                  TextField(controller: userNameController, decoration: const InputDecoration(labelText: "Name")),
-                  TextField(controller: userMissionController, decoration: const InputDecoration(labelText: "Mission Statement"), maxLines: 3),
-                  ElevatedButton(onPressed: _saveUserPersona, child: const Text("Save Persona")),
-                  const Divider(height: 30),
-                  Text("Available Personas (Drag to Advocates/Jury)", style: Theme.of(context).textTheme.titleMedium),
-                  // TODO: Implement Draggable list of availablePersonas
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: availablePersonas.length,
-                      itemBuilder: (context, index) => Draggable<Persona>(
-                        data: availablePersonas[index],
-                        feedback: Material(child: Text(availablePersonas[index].name, style: const TextStyle(fontSize: 16, color: Colors.blue))),
-                        childWhenDragging: Container(padding: const EdgeInsets.all(8), child: Text(availablePersonas[index].name, style: const TextStyle(color: Colors.grey))),
-                        child: Card(child: ListTile(title: Text(availablePersonas[index].name))),
-                      )
-                    ),
-                  ),
-                ],
-              ),
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Left side - User Persona Editor
+          Expanded(
+            flex: 3,
+            child: PersonaEditor(
+              persona: _userPersona,
+              onPersonaChanged: _updateUserPersona,
             ),
-            const SizedBox(width: 16),
-            // Right Panel: LLM Log, Advocates, Jury, Question
-            Expanded(
-              flex: 2,
-              child: Column(
-                children: [
-                  // Advocates & Jury Selection
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+          ),
+          
+          // Right side - Conversation display and Persona selection
+          Expanded(
+            flex: 5,
+            child: Column(
+              children: [
+                // Conversation display
+                Expanded(
+                  flex: 3,
+                  child: ConversationDisplay(text: _conversationText),
+                ),
+                
+                // Question input and Persona selection
+                Container(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
                     children: [
-                      Column(children: [const Text("Advocate 1"), _buildDropTarget(0, true)]),
-                      Column(children: [const Text("Advocate 2"), _buildDropTarget(1, true)]),
+                      PersonaSelector(
+                        availablePersonas: _availablePersonas,
+                        advocatePersonas: _advocatePersonas,
+                        juryPersonas: _juryPersonas,
+                        onAdvocatesChanged: (advocates) {
+                          setState(() {
+                            _advocatePersonas = advocates;
+                          });
+                        },
+                        onJuryChanged: (jury) {
+                          setState(() {
+                            _juryPersonas = jury;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _questionController,
+                              decoration: const InputDecoration(
+                                hintText: 'Type your question...',
+                                border: OutlineInputBorder(),
+                              ),
+                              maxLines: 3,
+                              onSubmitted: (_) {
+                                if (_canAsk) _askQuestion();
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: _canAsk ? _askQuestion : null,
+                            child: const Text('Ask'),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
-                  const Text("Jury (up to 12)"),
-                  // TODO: Implement Jury drop targets (e.g., Wrap or GridView of DropTargets)
-                  Wrap(
-                    spacing: 8.0,
-                    runSpacing: 4.0,
-                    children: List<Widget>.generate(12, (index) => _buildDropTarget(index, false)),
-                  ),
-                  const Divider(height: 30),
-                  // LLM Output
-                  Text("Conversation Log", style: Theme.of(context).textTheme.headlineSmall),
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(border: Border.all(color: Colors.grey)),
-                      child: ListView.builder(
-                        itemCount: llmLog.length,
-                        itemBuilder: (context, index) => Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(llmLog[index]),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Question Input
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: TextField(
-                      controller: questionController,
-                      decoration: const InputDecoration(hintText: "Enter your question here...", border: OutlineInputBorder()),
-                      maxLines: 3,
-                    ),
-                  ),
-                  ElevatedButton(
-                    onPressed: (selectedAdvocates.where((p) => p != null).length == 2 && userNameController.text.isNotEmpty && userMissionController.text.isNotEmpty)
-                        ? _askQuestion
-                        : null,
-                    child: const Text("Ask"),
-                  )
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildDropTarget(int index, bool isAdvocate) {
-    return DragTarget<Persona>(
-      builder: (context, candidateData, rejectedData) {
-        Persona? currentPersona = isAdvocate ? selectedAdvocates[index] : (index < selectedJury.length ? selectedJury[index] : null);
-        return Container(
-          height: 50,
-          width: 100,
-          margin: const EdgeInsets.all(4),
-          decoration: BoxDecoration(border: Border.all(color: Colors.blueGrey), color: candidateData.isNotEmpty ? Colors.lightBlue.withOpacity(0.3) : Colors.white),
-          child: Center(child: Text(currentPersona?.name ?? (isAdvocate ? "Advocate" : "Juror"))),
-        );
-      },
-      onAccept: (persona) {
-        setState(() {
-          if (isAdvocate) {
-            // Prevent user persona from being an advocate, or same advocate twice
-            if (persona.name != userPersona.name && !selectedAdvocates.any((p) => p?.name == persona.name)) {
-               selectedAdvocates[index] = persona;
-            }
-          } else {
-             // Prevent user persona from being a juror, or same juror multiple times
-            if (persona.name != userPersona.name && !selectedJury.any((p) => p?.name == persona.name)) {
-              if (index < selectedJury.length) selectedJury[index] = persona;
-            }
-          }
-        });
-      },
-    );
+  @override
+  void dispose() {
+    _questionController.dispose();
+    super.dispose();
   }
 }

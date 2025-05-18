@@ -1,58 +1,80 @@
 // lib/services/storage_service.dart
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import '../models/persona.dart'; // Assuming persona.dart is in lib/models/
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/persona.dart';
 
 class StorageService {
-     static const String _apiKey = 'gemini_api_key';
-static const String _userPersonaKey = 'user_persona';
-static const String _otherPersonasKey = 'other_personas';
-
-  Future<void> saveApiKey(String apiKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_apiKey, apiKey);
+  static const String _apiKeyKey = 'gemini_api_key';
+  static const String _userPersonaKey = 'user_persona';
+  static const String _personasKey = 'personas';
+  
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  late SharedPreferences _prefs;
+  
+  Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
   }
-
+  
+  // API Key Management
   Future<String?> getApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_apiKey);
+    return await _secureStorage.read(key: _apiKeyKey);
   }
-
-  Future<void> saveUserPersona(Persona persona) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_userPersonaKey, jsonEncode(persona.toJson()));
+  
+  Future<void> saveApiKey(String apiKey) async {
+    await _secureStorage.write(key: _apiKeyKey, value: apiKey);
   }
-
+  
+  // User Persona Management
   Future<Persona?> getUserPersona() async {
-    final prefs = await SharedPreferences.getInstance();
-    final personaJson = prefs.getString(_userPersonaKey);
-    if (personaJson != null) {
-      return Persona.fromJson(jsonDecode(personaJson));
+    final personaJson = _prefs.getString(_userPersonaKey);
+    if (personaJson == null) return null;
+    
+    final Map<String, dynamic> data = json.decode(personaJson);
+    return Persona.fromJson(data);
+  }
+  
+  Future<void> saveUserPersona(Persona persona) async {
+    await _prefs.setString(_userPersonaKey, json.encode(persona.toJson()));
+  }
+  
+  // Other Personas Management
+  Future<List<Persona>> getPersonas() async {
+    final personasJson = _prefs.getStringList(_personasKey);
+    if (personasJson == null) return [];
+    
+    return personasJson
+        .map((personaJson) => Persona.fromJson(json.decode(personaJson)))
+        .toList();
+  }
+  
+  Future<void> savePersonas(List<Persona> personas) async {
+    final personasJson = personas
+        .map((persona) => json.encode(persona.toJson()))
+        .toList();
+    
+    await _prefs.setStringList(_personasKey, personasJson);
+  }
+  
+  Future<void> addPersona(Persona persona) async {
+    final personas = await getPersonas();
+    personas.add(persona);
+    await savePersonas(personas);
+  }
+  
+  Future<void> updatePersona(Persona updatedPersona) async {
+    final personas = await getPersonas();
+    final index = personas.indexWhere((p) => p.name == updatedPersona.name);
+    
+    if (index != -1) {
+      personas[index] = updatedPersona;
+      await savePersonas(personas);
     }
-    return null;
   }
-
-  Future<void> saveOtherPersonas(List<Persona> personas) async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> personasJsonList = personas.map((p) => jsonEncode(p.toJson())).toList();
-    await prefs.setStringList(_otherPersonasKey, personasJsonList);
-  }
-
-  Future<List<Persona>> getOtherPersonas() async {
-    final prefs = await SharedPreferences.getInstance();
-    final personasJsonList = prefs.getStringList(_otherPersonasKey);
-    if (personasJsonList != null) {
-      return personasJsonList.map((json) => Persona.fromJson(jsonDecode(json))).toList();
-    }
-    return [];
-  }
-
-  // Helper to save a single "other" persona (used for defaults)
-  Future<void> savePersona(Persona persona) async {
-      List<Persona> others = await getOtherPersonas();
-      // Avoid duplicates by name, update if exists
-      others.removeWhere((p) => p.name == persona.name);
-      others.add(persona);
-      await saveOtherPersonas(others);
+  
+  Future<void> deletePersona(String name) async {
+    final personas = await getPersonas();
+    personas.removeWhere((p) => p.name == name);
+    await savePersonas(personas);
   }
 }

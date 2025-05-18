@@ -1,11 +1,16 @@
 # Purpose
-This is a Flutter application for MacOS, iOS, and Android, that allows a user to ask a question of an orchestrated set of Personas using Large Language Models. The user defines
+This is a Flutter application for MacOS, iOS, and Android, that allows a user to ask a question of an orchestrated set of Personas using Large Language Models. It uses the Google Gemini API.
 
 ## Generated Files:
 - lib/main.dart: The main entry point for the Flutter application.
 - lib/services/storage_service.dart: Handles local storage for Personas and API keys.
-- lib/ui/widgets/: Directory for UI components.
+- lib/ui/widgets/persona_editor.dart: Widget for editing the user's persona.
+- lib/ui/widgets/conversation_display.dart: Widget for displaying conversation output.
+- lib/ui/widgets/persona_selector.dart: Widget for selecting personas as advocates or jury.
+- lib/ui/widgets/api_key_dialog.dart: Dialog for entering the Gemini API key.
+- lib/models/persona.dart: Data model for persona objects.
 - lib/bs_ns_controller.dart: Manages the invocation and interaction with the BS-NS process.
+- pubspec.yaml: Updated with required dependencies.
 
 ## Data Types
 A Persona is a combination of a name and a Mission Statement, which is a long-form description of a person's goals and intentions. More details are in persona.few.md.
