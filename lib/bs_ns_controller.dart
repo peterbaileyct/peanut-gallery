@@ -1,240 +1,156 @@
 // lib/bs_ns_controller.dart
-import 'models/persona.dart';
-import 'bs_ns.dart'; // Assuming bs_ns.dart is in lib/
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:peanut_gallery/models/persona.dart';
+import 'models/persona.dart';
 
-class BsNsController {
-  final Function(String) logCallback;
-  final Future<String?> Function() getApiKeyCallback; // To fetch API key when needed
-  late BsNs _bsNsInstance;
+enum EntryType {
+  prompt,    // Prompts sent to LLM
+  response,  // Responses from LLM
+  metadata,  // Information about the process
+  system,    // System messages
+}
 
-  static const String _geminiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+class ConversationEntry {
+  final EntryType type;
+  final String speaker;
+  final String content;
+  final DateTime timestamp;
+  
+  ConversationEntry({
+    required this.type,
+    this.speaker = '',
+    required this.content,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
+}
 
-  BsNsController({required this.logCallback, required this.getApiKeyCallback}) {
-    _bsNsInstance = BsNs(logCallback: logCallback, getApiKeyCallback: getApiKeyCallback);
+class BSNSController {
+  final StreamController<List<ConversationEntry>> _conversationController = 
+      StreamController<List<ConversationEntry>>.broadcast();
+  
+  final List<ConversationEntry> _entries = [];
+  
+  Stream<List<ConversationEntry>> get conversationStream => _conversationController.stream;
+  List<ConversationEntry> get entries => List.unmodifiable(_entries);
+  
+  void _addEntry(ConversationEntry entry) {
+    _entries.add(entry);
+    _conversationController.add(_entries);
   }
-
-  Future<void> startMediation({
+  
+  void clearConversation() {
+    _entries.clear();
+    _conversationController.add(_entries);
+  }
+  
+  Future<void> processQuestion({
+    required String question,
     required Persona userPersona,
     required List<Persona> advocates,
     required List<Persona> jury,
-    required String question,
+    required String apiKey,
   }) async {
-    // Ensure advocates are exactly two as per spec, though bs_ns.dart might also validate
     if (advocates.length != 2) {
-      logCallback("Error: Exactly two advocates are required.");
+      _addEntry(ConversationEntry(
+        type: EntryType.system,
+        content: 'Error: Exactly 2 advocate personas are required',
+      ));
       return;
     }
-    await _bsNsInstance.mediate(
-      userPersona: userPersona,
-      advocates: advocates,
-      jury: jury,
-      question: question,
-    );
-  }
-
-  /// Processes a question using the BS-NS methodology
-  /// 
-  /// Takes a question and runs it through the BS-NS process using the provided personas
-  /// Returns the final answer and provides updates through the onUpdate callback
-  Future<String> process({
-    required String question,
-    required Persona userPersona,
-    required List<Persona> advocates,
-    required List<Persona> jury,
-    required String apiKey,
-    required Function(String) onUpdate,
-  }) async {
-    if (advocates.length != 2) {
-      throw ArgumentError('Exactly 2 advocate personas are required');
-    }
     
-    // Step 1: Initial analysis by advocates
-    onUpdate('Step 1: Advocates analyzing the question...\n');
+    // Clear previous conversation
+    clearConversation();
     
-    final advocate1Response = await _getPersonaResponse(
-      persona: advocates[0],
-      question: question,
-      role: 'Advocate',
-      apiKey: apiKey,
-    );
+    // Add question to conversation
+    _addEntry(ConversationEntry(
+      type: EntryType.system,
+      speaker: userPersona.name,
+      content: question,
+    ));
     
-    onUpdate('\n${advocates[0].name} (Advocate 1):\n$advocate1Response\n');
+    // Log that we're starting BS-NS process
+    _addEntry(ConversationEntry(
+      type: EntryType.metadata,
+      content: 'Starting BS-NS process with advocates: ${advocates.map((a) => a.name).join(", ")}',
+    ));
     
-    final advocate2Response = await _getPersonaResponse(
-      persona: advocates[1],
-      question: question,
-      role: 'Advocate',
-      apiKey: apiKey,
-    );
-    
-    onUpdate('\n${advocates[1].name} (Advocate 2):\n$advocate2Response\n');
-    
-    // Step 2: Jury deliberation
-    String juryResponse = '';
-    if (jury.isNotEmpty) {
-      onUpdate('\nStep 2: Jury deliberation...\n');
+    try {
+      // This would integrate with the actual BS-NS process defined in bs-ns.few.md
+      // For now, we'll simulate the process with a simple implementation
       
-      final juryDeliberation = await _conductJuryDeliberation(
-        question: question,
-        advocate1: advocates[0],
-        advocate1Response: advocate1Response,
-        advocate2: advocates[1],
-        advocate2Response: advocate2Response,
-        jury: jury,
-        apiKey: apiKey,
-      );
+      // Advocate 1 response
+      await _simulateAdvocateResponse(advocates[0], question, apiKey);
       
-      juryResponse = juryDeliberation;
-      onUpdate('\nJury Deliberation:\n$juryResponse\n');
-    }
-    
-    // Step 3: Final synthesis
-    onUpdate('\nStep 3: Final synthesis...\n');
-    
-    final finalResponse = await _synthesizeFinalResponse(
-      question: question,
-      userPersona: userPersona,
-      advocate1: advocates[0],
-      advocate1Response: advocate1Response,
-      advocate2: advocates[1],
-      advocate2Response: advocate2Response,
-      juryResponse: juryResponse,
-      apiKey: apiKey,
-    );
-    
-    onUpdate('\nFinal Response:\n$finalResponse\n');
-    
-    return finalResponse;
-  }
-  
-  Future<String> _getPersonaResponse({
-    required Persona persona,
-    required String question,
-    required String role,
-    required String apiKey,
-  }) async {
-    final prompt = '''
-    You are ${persona.name}, with the following mission: "${persona.missionStatement}"
-    
-    As a $role, your task is to analyze and respond to this question:
-    
-    "$question"
-    
-    Provide your perspective based on your mission statement. Be thorough but concise.
-    ''';
-    
-    return await _callGeminiApi(prompt: prompt, apiKey: apiKey);
-  }
-  
-  Future<String> _conductJuryDeliberation({
-    required String question,
-    required Persona advocate1,
-    required String advocate1Response,
-    required Persona advocate2,
-    required String advocate2Response,
-    required List<Persona> jury,
-    required String apiKey,
-  }) async {
-    final juryNames = jury.map((p) => p.name).join(', ');
-    final juryMissions = jury.map((p) => '${p.name}: "${p.missionStatement}"').join('\n');
-    
-    final prompt = '''
-    You are acting as a jury consisting of: $juryNames
-    
-    Each jury member has the following mission statement:
-    $juryMissions
-    
-    You are deliberating on the following question:
-    "$question"
-    
-    Two advocates have presented their perspectives:
-    
-    ${advocate1.name} said:
-    "$advocate1Response"
-    
-    ${advocate2.name} said:
-    "$advocate2Response"
-    
-    As the jury, deliberate on these perspectives and provide a consensus view. If consensus isn't possible, note areas of agreement and disagreement.
-    Respond in a single voice representing the jury's collective judgment.
-    ''';
-    
-    return await _callGeminiApi(prompt: prompt, apiKey: apiKey);
-  }
-  
-  Future<String> _synthesizeFinalResponse({
-    required String question,
-    required Persona userPersona,
-    required Persona advocate1,
-    required String advocate1Response,
-    required Persona advocate2,
-    required String advocate2Response,
-    required String juryResponse,
-    required String apiKey,
-  }) async {
-    final hasJuryInput = juryResponse.isNotEmpty;
-    
-    final prompt = '''
-    You are helping ${userPersona.name}, whose mission is "${userPersona.missionStatement}",
-    to synthesize perspectives on the question:
-    
-    "$question"
-    
-    The following perspectives were provided:
-    
-    ${advocate1.name} (Advocate 1) said:
-    "$advocate1Response"
-    
-    ${advocate2.name} (Advocate 2) said:
-    "$advocate2Response"
-    
-    ${hasJuryInput ? 'The jury deliberation resulted in:\n"$juryResponse"\n\n' : ''}
-    
-    Synthesize a final, balanced answer to the question that takes into account all perspectives.
-    Focus on providing practical, actionable insights if applicable.
-    ''';
-    
-    return await _callGeminiApi(prompt: prompt, apiKey: apiKey);
-  }
-  
-  Future<String> _callGeminiApi({
-    required String prompt,
-    required String apiKey,
-  }) async {
-    final url = '$_geminiBaseUrl?key=$apiKey';
-    
-    final requestBody = {
-      'contents': [
-        {
-          'parts': [
-            {
-              'text': prompt
-            }
-          ]
+      // Advocate 2 response
+      await _simulateAdvocateResponse(advocates[1], question, apiKey);
+      
+      // If jury members are present, get their feedback
+      if (jury.isNotEmpty) {
+        _addEntry(ConversationEntry(
+          type: EntryType.metadata,
+          content: 'Getting feedback from jury with ${jury.length} members',
+        ));
+        
+        for (var juror in jury) {
+          await _simulateJurorFeedback(juror, question, apiKey);
         }
-      ],
-      'generationConfig': {
-        'temperature': 0.7,
-        'topK': 40,
-        'topP': 0.95,
-        'maxOutputTokens': 2048,
       }
-    };
-    
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode(requestBody),
-    );
-    
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      return data['candidates'][0]['content']['parts'][0]['text'];
-    } else {
-      throw Exception('Failed to get response from Gemini API: ${response.body}');
+      
+      // Final summary
+      _addEntry(ConversationEntry(
+        type: EntryType.metadata,
+        content: 'BS-NS process completed',
+      ));
+      
+    } catch (e) {
+      _addEntry(ConversationEntry(
+        type: EntryType.system,
+        content: 'Error during BS-NS process: ${e.toString()}',
+      ));
     }
+  }
+  
+  // This is a simplified simulation - would be replaced with actual calls to Gemini API
+  Future<void> _simulateAdvocateResponse(Persona advocate, String question, String apiKey) async {
+    _addEntry(ConversationEntry(
+      type: EntryType.prompt,
+      speaker: advocate.name,
+      content: 'Considering question as ${advocate.name}: "${advocate.missionStatement}"',
+    ));
+    
+    // Simulate API call delay
+    await Future.delayed(Duration(seconds: 2));
+    
+    _addEntry(ConversationEntry(
+      type: EntryType.response,
+      speaker: advocate.name,
+      content: 'This is a simulated response from ${advocate.name} about "$question".\n\n'
+          'My perspective as ${advocate.name} (${advocate.missionStatement}) is that...',
+    ));
+  }
+  
+  // Simulated jury feedback
+  Future<void> _simulateJurorFeedback(Persona juror, String question, String apiKey) async {
+    _addEntry(ConversationEntry(
+      type: EntryType.prompt,
+      speaker: juror.name,
+      content: 'Asking for feedback from ${juror.name} (${juror.missionStatement})',
+    ));
+    
+    // Simulate API call delay
+    await Future.delayed(Duration(seconds: 1));
+    
+    _addEntry(ConversationEntry(
+      type: EntryType.response,
+      speaker: juror.name,
+      content: 'As ${juror.name}, I evaluate the arguments as follows...',
+    ));
+  }
+  
+  // In a real implementation, this would make actual API calls to Google Gemini
+  Future<String> _callGeminiAPI(String prompt, String apiKey) async {
+    // This is just a placeholder - actual implementation would use the Gemini API
+    throw UnimplementedError('Gemini API integration not implemented');
   }
 }

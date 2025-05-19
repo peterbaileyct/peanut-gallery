@@ -1,76 +1,55 @@
 import 'package:flutter/material.dart';
+import '../../bs_ns_controller.dart';
 
-class ConversationDisplay extends StatefulWidget {
-  final String text;
+class ConversationDisplay extends StatelessWidget {
+  final BSNSController controller;
 
   const ConversationDisplay({
-    Key? key,
-    required this.text,
+    Key? key, 
+    required this.controller,
   }) : super(key: key);
-
-  @override
-  _ConversationDisplayState createState() => _ConversationDisplayState();
-}
-
-class _ConversationDisplayState extends State<ConversationDisplay> {
-  late ScrollController _scrollController;
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController = ScrollController();
-  }
-
-  @override
-  void didUpdateWidget(ConversationDisplay oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.text != oldWidget.text) {
-      // Scroll to bottom when text updates
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.all(16.0),
+      elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(8.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Conversation',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                'Conversation',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
-            const SizedBox(height: 16),
+            Divider(),
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                padding: const EdgeInsets.all(8),
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  child: SelectableText(
-                    widget.text.isEmpty ? 'Conversation will appear here...' : widget.text,
-                    style: const TextStyle(
-                      fontFamily: 'Courier New',
-                    ),
-                  ),
-                ),
+              child: StreamBuilder<List<ConversationEntry>>(
+                stream: controller.conversationStream,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'Ask a question to start a conversation.',
+                        style: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    );
+                  }
+                  
+                  return ListView.builder(
+                    itemCount: snapshot.data!.length,
+                    itemBuilder: (context, index) {
+                      final entry = snapshot.data![index];
+                      return _buildConversationEntry(context, entry);
+                    },
+                  );
+                },
               ),
             ),
           ],
@@ -78,10 +57,57 @@ class _ConversationDisplayState extends State<ConversationDisplay> {
       ),
     );
   }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
+  
+  Widget _buildConversationEntry(BuildContext context, ConversationEntry entry) {
+    Color backgroundColor;
+    String prefix;
+    
+    switch (entry.type) {
+      case EntryType.prompt:
+        backgroundColor = Colors.grey[200]!;
+        prefix = "PROMPT:";
+        break;
+      case EntryType.response:
+        backgroundColor = Colors.blue[50]!;
+        prefix = "RESPONSE:";
+        break;
+      case EntryType.metadata:
+        backgroundColor = Colors.amber[50]!;
+        prefix = "META:";
+        break;
+      case EntryType.system:
+        backgroundColor = Colors.green[50]!;
+        prefix = "SYSTEM:";
+        break;
+    }
+    
+    return Card(
+      color: backgroundColor,
+      margin: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (entry.speaker.isNotEmpty)
+              Text(
+                "${entry.speaker} ($prefix)",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            if (entry.speaker.isEmpty)
+              Text(
+                prefix,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            SizedBox(height: 4),
+            SelectableText(entry.content),
+          ],
+        ),
+      ),
+    );
   }
 }

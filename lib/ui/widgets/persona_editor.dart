@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:peanut_gallery/models/persona.dart';
+import '../../models/persona.dart';
 
 class PersonaEditor extends StatefulWidget {
-  final Persona persona;
-  final Function(String, String) onPersonaChanged;
+  final Persona? persona;
+  final Function(Persona) onSave;
 
   const PersonaEditor({
     Key? key,
     required this.persona,
-    required this.onPersonaChanged,
+    required this.onSave,
   }) : super(key: key);
 
   @override
@@ -22,71 +22,82 @@ class _PersonaEditorState extends State<PersonaEditor> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.persona.name);
-    _missionController = TextEditingController(text: widget.persona.missionStatement);
+    _nameController = TextEditingController(text: widget.persona?.name ?? '');
+    _missionController = TextEditingController(text: widget.persona?.missionStatement ?? '');
   }
 
   @override
   void didUpdateWidget(PersonaEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.persona != widget.persona) {
-      _nameController.text = widget.persona.name;
-      _missionController.text = widget.persona.missionStatement;
+    if (widget.persona != oldWidget.persona) {
+      _nameController.text = widget.persona?.name ?? '';
+      _missionController.text = widget.persona?.missionStatement ?? '';
     }
   }
 
-  void _updatePersona() {
-    widget.onPersonaChanged(
-      _nameController.text,
-      _missionController.text,
+  bool get _isValid =>
+      _nameController.text.trim().isNotEmpty &&
+      _missionController.text.trim().isNotEmpty;
+
+  void _saveChanges() {
+    if (!_isValid) return;
+
+    final updatedPersona = (widget.persona ??
+        Persona(
+          id: 'user',
+          name: _nameController.text.trim(),
+          missionStatement: _missionController.text.trim(),
+        )).copyWith(
+      name: _nameController.text.trim(),
+      missionStatement: _missionController.text.trim(),
     );
+
+    widget.onSave(updatedPersona);
   }
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.all(16.0),
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Your Persona',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Name',
                 border: OutlineInputBorder(),
               ),
-              onChanged: (_) => _updatePersona(),
+              onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Mission Statement',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
+            SizedBox(height: 16),
             Expanded(
               child: TextField(
                 controller: _missionController,
-                decoration: const InputDecoration(
-                  hintText: 'Describe your persona\'s mission...',
+                decoration: InputDecoration(
+                  labelText: 'Mission Statement',
                   border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
                 ),
                 maxLines: null,
                 expands: true,
                 textAlignVertical: TextAlignVertical.top,
-                onChanged: (_) => _updatePersona(),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton(
+                onPressed: _isValid ? _saveChanges : null,
+                child: Text('Save'),
               ),
             ),
           ],

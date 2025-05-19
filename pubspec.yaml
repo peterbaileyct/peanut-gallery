@@ -1,5 +1,5 @@
 name: peanut_gallery
-description: "A Flutter application for MacOS, iOS, and Android, that allows a user to ask a question of an orchestrated set of Personas using Large Language Models."
+description: A Flutter application for orchestrating conversations between Personas using Google Gemini API.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -11,8 +11,11 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.2
   http: ^1.1.0
+  provider: ^6.0.5
   shared_preferences: ^2.2.0
-  flutter_secure_storage: ^9.0.0
+  flutter_secure_storage: ^8.0.0
+  uuid: ^3.0.7
+  google_generative_ai: ^0.1.0
 
 dev_dependencies:
   flutter_test:

@@ -28,6 +28,7 @@ If the user's Persona has not been defined, it will be initialized as: Puddin' T
 The main UI is a window that allows the user to enter a Name and Mission Statement for their Persona on the left side. These changes will be stored locally and loaded at app start. The right side is a large, scrolling text block that displays the prompts and outputs of each LLM used. A button in the top-right corner can be used to enter a new Google Gemini API key. At the bottom, a long multi-line text input can be used for the user to enter a question. On the right side, the names of available Personas other than the user are listed. They can be dragged into boxes for Advocates and Jury. The "Ask" button on the right side of the question box is disabled if the user persona settings are blank or there are not two Advocate personas selected.
 A user can select up to twelve Personas to comprise a Jury.
 A user can ask a question by typing or pasting it into a text area and clicking an "Ask" button or hitting Cmd-Enter.
+A button next to the "available personas" display opens a separate window in which the user can add, remove, and update Personas.
 
 ## Question Process
 When a question is asked, an instance of the BS-NS process defined in bs-ns.few.md will be launched. The LLM prompts and responses logged by BS-NS will be displayed in the main text area.
